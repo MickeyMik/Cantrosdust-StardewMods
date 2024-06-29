@@ -180,7 +180,7 @@ namespace TimeSpeed
         {
             if (!this.ShouldEnable())
                 return;
-
+            this.Monitor.Log($"{this.TimeHelper.TickProgress.ToString()}", LogLevel.Info);
             this.TimeHelper.Update();
         }
 
