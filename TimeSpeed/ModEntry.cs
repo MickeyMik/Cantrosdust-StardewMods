@@ -47,6 +47,12 @@ namespace TimeSpeed
             set => this._tickInterval = Math.Max(value, 0);
         }
 
+        /// <summary>How much time has elapsed so far during this 10-game-minute interval</summary>
+        private double ElapsedTimeInterval;
+
+        /// <summary>The percentage of ElapsedTimeInterval / TargetTimeInterval</summary>
+        private double GameTimeIntervalProgress;
+
 
         /*********
         ** Public methods
@@ -61,7 +67,6 @@ namespace TimeSpeed
             this.Config = helper.ReadConfig<ModConfig>();
 
             // add time events
-            this.TimeHelper.WhenTickProgressChanged(this.OnTickProgressed);
             helper.Events.GameLoop.GameLaunched += this.OnGameLaunched;
             helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
             helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
@@ -180,37 +185,34 @@ namespace TimeSpeed
         {
             if (!this.ShouldEnable())
                 return;
-            this.Monitor.Log($"{this.TimeHelper.TickProgress.ToString()}", LogLevel.Info);
-            this.TimeHelper.Update();
-        }
 
-        /// <summary>Raised after the <see cref="Framework.TimeHelper.TickProgress"/> value changes.</summary>
-        /// <param name="sender">The event sender.</param>
-        /// <param name="e">The event arguments.</param>
-        private void OnTickProgressed(object sender, TickProgressChangedEventArgs e)
-        {
-            if (!this.ShouldEnable())
-                return;
-
-            if (this.IsTimeFrozen)
-                this.TimeHelper.TickProgress = e.TimeChanged ? 0 : e.PreviousProgress;
-            else
-            {
-                if (!this.AdjustTime)
-                    return;
-                if (this.TickInterval == 0)
-                    this.TickInterval = 1000;
-
-                if (e.TimeChanged)
-                    this.TimeHelper.TickProgress = this.ScaleTickProgress(this.TimeHelper.TickProgress, this.TickInterval);
-                else
-                    this.TimeHelper.TickProgress = e.PreviousProgress + this.ScaleTickProgress(e.NewProgress - e.PreviousProgress, this.TickInterval);
-            }
+            this.TickUpdate();
         }
 
         /****
         ** Methods
         ****/
+        /// <summary>Runs during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>; adds and adjusts time.</summary>
+        private void TickUpdate()
+        {
+            // If time is not frozen, then change elapsed time interval
+            // Remark: I've tried moving the interval reset to "OnTimeChanged", but it seems that the game ticks before then and therefore jumps from 0% to 100%
+            if (!this.IsTimeFrozen) // If GameTimeInterval is 0, reset ElapsedTimeInterval to 0; otherwise, add ElapsedGameTime
+                this.ElapsedTimeInterval = (Game1.gameTimeInterval == 0) ? 0 : (this.ElapsedTimeInterval + Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds);
+
+            // Calculate percentage towards target TickInterval
+            this.GameTimeIntervalProgress = (double)Math.Min(this.ElapsedTimeInterval / this.TickInterval, 1);
+
+
+            // Copied from "OnTickProgressed" function, originally un-commented
+            if (!this.AdjustTime) // Specifically refers to festival days config
+                return;
+            if (this.TickInterval == 0)
+                this.TickInterval = 1000;
+
+            this.TimeHelper.TickProgress = this.GameTimeIntervalProgress;
+        }
+
         /// <summary>Get whether time features should be enabled.</summary>
         /// <param name="forInput">Whether to check for input handling.</param>
         private bool ShouldEnable(bool forInput = false)
@@ -370,14 +372,6 @@ namespace TimeSpeed
         private void UpdateScaleForDay(Season season, int dayOfMonth)
         {
             this.AdjustTime = this.Config.ShouldScale(season, dayOfMonth);
-        }
-
-        /// <summary>Get the adjusted progress towards the next 10-game-minute tick.</summary>
-        /// <param name="progress">The current progress.</param>
-        /// <param name="newTickInterval">The new tick interval.</param>
-        private double ScaleTickProgress(double progress, int newTickInterval)
-        {
-            return progress * this.TimeHelper.CurrentDefaultTickInterval / newTickInterval;
         }
 
         /// <summary>Get the freeze type which applies for the current context, ignoring overrides by the player.</summary>
