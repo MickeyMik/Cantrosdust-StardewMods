@@ -36,7 +36,7 @@ internal class ModEntry : Mod
 
     /// <summary>Whether the flow of time should be adjusted (if it is a festival day).</summary>
     /// <remarks>Currently only enables/disables based on user setting for festival days</remarks>
-    private bool EnableTimeFlowToday;
+    private bool IsTimeFlowEnabledToday;
 
     /// <summary>Minimum milliseconds allowed for <see cref="TargetTickInterval"/>.</summary>
     /// <remarks>Could be added to ModConfig menu.</remarks>
@@ -139,7 +139,7 @@ internal class ModEntry : Mod
         if (!this.ShouldEnable())
             return;
 
-        this.UpdateEnableToday(Game1.season, Game1.dayOfMonth);
+        this.UpdateTimeFlowEnabledToday(Game1.season, Game1.dayOfMonth);
         this.UpdateTimeFreeze(clearPreviousOverrides: true);
         this.UpdateSettingsForLocation(Game1.currentLocation);
     }
@@ -224,8 +224,8 @@ internal class ModEntry : Mod
         // If time is frozen, skip calculations and keep current TargetTickProgress
         if (!this.IsTimeFrozen)
         {
-            // Skip time adjustment if mod is disabled today
-            if (!this.EnableTimeFlowToday)
+            // Skip time adjustment if disabled today
+            if (!this.IsTimeFlowEnabledToday)
                 return;
 
             // If GameTimeInterval is 0 (the UpdateTick after the game-clock ticked forward), reset ElapsedTimeInCurrentTickInterval to 0
@@ -269,7 +269,7 @@ internal class ModEntry : Mod
     private void ReloadConfig()
     {
         this.Config = this.Helper.ReadConfig<ModConfig>();
-        this.UpdateEnableToday(Game1.season, Game1.dayOfMonth);
+        this.UpdateTimeFlowEnabledToday(Game1.season, Game1.dayOfMonth);
         this.UpdateSettingsForLocation(Game1.currentLocation);
         this.Notifier.ShortNotify(I18n.Message_ConfigReloaded());
     }
@@ -399,9 +399,9 @@ internal class ModEntry : Mod
     /// <summary>Update the time settings for the given date.</summary>
     /// <param name="season">The current season.</param>
     /// <param name="dayOfMonth">The current day of month.</param>
-    private void UpdateEnableToday(Season season, int dayOfMonth)
+    private void UpdateTimeFlowEnabledToday(Season season, int dayOfMonth)
     {
-        this.EnableTimeFlowToday = this.Config.ShouldEnableForDay(season, dayOfMonth);
+        this.IsTimeFlowEnabledToday = this.Config.ShouldEnableForDay(season, dayOfMonth);
     }
 
     /// <summary>Get the freeze type which applies for the current context, ignoring overrides by the player.</summary>
