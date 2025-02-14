@@ -67,7 +67,6 @@ internal class ModEntry : Mod
         this.Config = helper.ReadConfig<ModConfig>();
 
         // add time events
-        this.TimeHelper.WhenTickProgressChanged(this.OnTickProgressed);
         helper.Events.GameLoop.GameLaunched += this.OnGameLaunched;
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
@@ -205,29 +204,6 @@ internal class ModEntry : Mod
         }
     }
 
-    /// <summary>Raised after the <see cref="Framework.TimeHelper.TickProgress"/> value changes.</summary>
-    /// <param name="sender">The event sender.</param>
-    /// <param name="e">The event arguments.</param>
-    private void OnTickProgressed(object sender, TickProgressChangedEventArgs e)
-    {
-        if (!this.ShouldEnable())
-            return;
-
-        if (this.IsTimeFrozen)
-            this.TimeHelper.TickProgress = e.TimeChanged ? 0 : e.PreviousProgress;
-        else
-        {
-            if (!this.AdjustTime)
-                return;
-            if (this.TickInterval == 0)
-                this.TickInterval = 1000;
-
-            if (e.TimeChanged)
-                this.TimeHelper.TickProgress = this.ScaleTickProgress(this.TimeHelper.TickProgress, this.TickInterval);
-            else
-                this.TimeHelper.TickProgress = e.PreviousProgress + this.ScaleTickProgress(e.NewProgress - e.PreviousProgress, this.TickInterval);
-        }
-    }
 
     /****
     ** Methods
@@ -415,15 +391,6 @@ internal class ModEntry : Mod
     private void UpdateScaleForDay(Season season, int dayOfMonth)
     {
         this.AdjustTime = this.Config.ShouldScale(season, dayOfMonth);
-    }
-
-    /// <summary>Get the adjusted progress towards the next 10-game-minute tick.</summary>
-    /// <param name="progress">The percentage of the clock tick interval (i.e. the interval between time changes) that elapsed since the last update tick.</param>
-    /// <param name="newTickInterval">The clock tick interval to which to apply the progress.</param>
-    private double ScaleTickProgress(double progress, int newTickInterval)
-    {
-        double ratio = this.TimeHelper.CurrentDefaultTickInterval / (newTickInterval * 1d); // ratio between the game's normal interval (e.g. 7000) and the player's custom interval
-        return progress * ratio;
     }
 
     /// <summary>Get the freeze type which applies for the current context, ignoring overrides by the player.</summary>
