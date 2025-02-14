@@ -9,11 +9,12 @@ internal class TimeHelper
     /*********
     ** Accessors
     *********/
-    /// <summary>The game's default tick interval in milliseconds for the current location.</summary>
-    public int CurrentDefaultTickInterval => 7000 + (Game1.currentLocation?.ExtraMillisecondsPerInGameMinute ?? 0);
+    /// <summary>The game's default 10-minute clock-tick interval in milliseconds for the current location.</summary>
+    /// <remarks>10 minutes in-game is normally 7000 ms, but skull cavern, for example, adds 2000 ms per 10 minutes</remarks>
+    public int CurrentDefaultTickInterval => Game1.realMilliSecondsPerGameTenMinutes + (Game1.currentLocation?.ExtraMillisecondsPerInGameMinute * 10 ?? 0);
 
     /// <summary>The percentage of the <see cref="CurrentDefaultTickInterval"/> that's elapsed since the last tick.</summary>
-    public double TickProgress
+    public double GameTickProgress
     {
         get => (double)Game1.gameTimeInterval / this.CurrentDefaultTickInterval;
         // the math.floor stops rounding errors causing time-skip

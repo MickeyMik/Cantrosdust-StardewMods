@@ -34,23 +34,28 @@ internal class ModEntry : Mod
         this.ManualFreeze == true
         || (this.AutoFreeze != AutoFreezeReason.None && this.ManualFreeze != false);
 
-    /// <summary>Whether the flow of time should be adjusted.</summary>
-    private bool AdjustTime;
+    /// <summary>Whether the flow of time should be adjusted (if it is a festival day).</summary>
+    /// <remarks>Currently only enables/disables based on user setting for festival days</remarks>
+    private bool IsTimeFlowEnabledToday;
 
-    /// <summary>Backing field for <see cref="TickInterval"/>.</summary>
+    /// <summary>Minimum milliseconds allowed for <see cref="TargetTickInterval"/>.</summary>
+    /// <remarks>Could be added to ModConfig menu.</remarks>
+    private int minTickIntervalAllowed = 100;
+
+    /// <summary>Backing field for <see cref="TargetTickInterval"/>.</summary>
     private int _tickInterval;
 
-    /// <summary>The number of milliseconds per 10-game-minutes to apply.</summary>
-    private int TickInterval
+    /// <summary>The number of milliseconds per 10-game-minute tick to apply.</summary>
+    private int TargetTickInterval
     {
         get => this._tickInterval;
-        set => this._tickInterval = Math.Max(value, 0);
+        set => this._tickInterval = Math.Max(value, this.minTickIntervalAllowed);
     }
 
     /// <summary>The number of milliseconds that has elapsed since last 10-game-minute tick interval.</summary>
     private double ElapsedTimeInCurrentTickInterval;
 
-    /// <summary>The percentage of <see cref="TickInterval"/> that has elapsed since the last tick.</summary>
+    /// <summary>The percentage of <see cref="TargetTickInterval"/> that has elapsed since the last tick.</summary>
     /// <remarks>See <see cref="ElapsedTimeInCurrentTickInterval"/> for milliseconds.</remarks>
     private double TargetTickProgress;
 
@@ -134,7 +139,7 @@ internal class ModEntry : Mod
         if (!this.ShouldEnable())
             return;
 
-        this.UpdateScaleForDay(Game1.season, Game1.dayOfMonth);
+        this.UpdateTimeFlowEnabledToday(Game1.season, Game1.dayOfMonth);
         this.UpdateTimeFreeze(clearPreviousOverrides: true);
         this.UpdateSettingsForLocation(Game1.currentLocation);
     }
@@ -201,7 +206,7 @@ internal class ModEntry : Mod
             else
                 timeFrozenLabel = null;
 
-            this.Monitor.Log($"Time is {Game1.timeOfDay}; {this.TimeHelper.TickProgress:P} towards {Utility.ModifyTime(Game1.timeOfDay, 10)} (tick interval: {this.TimeHelper.CurrentDefaultTickInterval}, {this.TickInterval / 10_000m:0.##}s/min{timeFrozenLabel})");
+            this.Monitor.Log($"Time is {Game1.timeOfDay}; {this.TimeHelper.GameTickProgress:P} towards {Utility.ModifyTime(Game1.timeOfDay, 10)} (tick interval: {this.TimeHelper.CurrentDefaultTickInterval}, {this.TargetTickInterval / 10_000m:0.##}s/min{timeFrozenLabel})");
         }
     }
 
@@ -220,7 +225,7 @@ internal class ModEntry : Mod
         if (!this.IsTimeFrozen)
         {
             // Skip time adjustment if disabled today
-            if (!this.AdjustTime)
+            if (!this.IsTimeFlowEnabledToday)
                 return;
 
             // If GameTimeInterval is 0 (the UpdateTick after the game-clock ticked forward), reset ElapsedTimeInCurrentTickInterval to 0
@@ -230,11 +235,11 @@ internal class ModEntry : Mod
             else
                 this.ElapsedTimeInCurrentTickInterval += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
 
-            // Calculate percentage towards TickInterval
-            this.TargetTickProgress = (double)Math.Min(this.ElapsedTimeInCurrentTickInterval / this.TickInterval, 1);
+            // Calculate percentage towards TargetTickInterval
+            this.TargetTickProgress = (double)Math.Min(this.ElapsedTimeInCurrentTickInterval / this.TargetTickInterval, 1);
         }
-        // Updates game-time based on current progress towards TickInterval.
-        this.TimeHelper.TickProgress = this.TargetTickProgress;
+        // Updates game-time based on current progress towards TargetTickInterval.
+        this.TimeHelper.GameTickProgress = this.TargetTickProgress;
     }
 
     /// <summary>Get whether time features should be enabled.</summary>
@@ -264,7 +269,7 @@ internal class ModEntry : Mod
     private void ReloadConfig()
     {
         this.Config = this.Helper.ReadConfig<ModConfig>();
-        this.UpdateScaleForDay(Game1.season, Game1.dayOfMonth);
+        this.UpdateTimeFlowEnabledToday(Game1.season, Game1.dayOfMonth);
         this.UpdateSettingsForLocation(Game1.currentLocation);
         this.Notifier.ShortNotify(I18n.Message_ConfigReloaded());
     }
@@ -273,7 +278,10 @@ internal class ModEntry : Mod
     /// <param name="increase">Whether to increment the tick interval; else decrement.</param>
     private void ChangeTickInterval(bool increase)
     {
-        // get offset to apply
+        // Get offset to apply, starting at 1 second;
+        //  Left ctrl  = 100 seconds,
+        //  Left shift = 10 seconds,
+        //  Left alt   = 0.1 seconds.
         int change = 1000;
         {
             KeyboardState state = Keyboard.GetState();
@@ -285,20 +293,18 @@ internal class ModEntry : Mod
                 change /= 10;
         }
 
-        // update tick interval
-        if (!increase)
-        {
-            int minAllowed = Math.Min(this.TickInterval, change);
-            this.TickInterval = Math.Max(minAllowed, this.TickInterval - change);
-        }
-        else
-            this.TickInterval = this.TickInterval + change;
+        // increase or decrease tick interval by offset
+        if (increase)
+            this.TargetTickInterval += change;
+        // only allow decrease if TickInterval remains above the minimum allowed.
+        else if (this.TargetTickInterval - change >= this.minTickIntervalAllowed)
+            this.TargetTickInterval -= change;
 
         // log change
         this.Notifier.QuickNotify(
-            I18n.Message_SpeedChanged(seconds: this.TickInterval / 1000)
+            I18n.Message_SpeedChanged(seconds: (float)this.TargetTickInterval / 1000)
         );
-        this.Monitor.Log($"Tick length set to {this.TickInterval / 1000d:0.##} seconds.", LogLevel.Info);
+        this.Monitor.Log($"Tick length set to {this.TargetTickInterval / 1000d:0.##} seconds.", LogLevel.Info);
     }
 
     /// <summary>Toggle whether time is frozen.</summary>
@@ -340,7 +346,7 @@ internal class ModEntry : Mod
 
         // update time settings
         this.UpdateTimeFreeze();
-        this.TickInterval = this.Config.GetMillisecondsPerMinute(location) * 10;
+        this.TargetTickInterval = this.Config.GetMillisecondsPerMinute(location) * 10;
 
         // notify player
         if (this.Config.LocationNotify)
@@ -356,7 +362,7 @@ internal class ModEntry : Mod
                     break;
 
                 default:
-                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeSpeedHere(seconds: this.TickInterval / 1000));
+                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeSpeedHere(seconds: this.TargetTickInterval / 1000));
                     break;
             }
         }
@@ -393,9 +399,9 @@ internal class ModEntry : Mod
     /// <summary>Update the time settings for the given date.</summary>
     /// <param name="season">The current season.</param>
     /// <param name="dayOfMonth">The current day of month.</param>
-    private void UpdateScaleForDay(Season season, int dayOfMonth)
+    private void UpdateTimeFlowEnabledToday(Season season, int dayOfMonth)
     {
-        this.AdjustTime = this.Config.ShouldScale(season, dayOfMonth);
+        this.IsTimeFlowEnabledToday = this.Config.ShouldTimeFlowOnDay(season, dayOfMonth);
     }
 
     /// <summary>Get the freeze type which applies for the current context, ignoring overrides by the player.</summary>

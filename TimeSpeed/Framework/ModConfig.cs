@@ -45,7 +45,7 @@ internal class ModConfig
     /// <summary>Get whether time settings should be applied on a given day.</summary>
     /// <param name="season">The season to check.</param>
     /// <param name="dayOfMonth">The day of month to check.</param>
-    public bool ShouldScale(Season season, int dayOfMonth)
+    public bool ShouldTimeFlowOnDay(Season season, int dayOfMonth)
     {
         return this.EnableOnFestivalDays || !Utility.isFestivalDay(dayOfMonth, season);
     }
