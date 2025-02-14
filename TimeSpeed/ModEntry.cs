@@ -34,8 +34,13 @@ internal class ModEntry : Mod
         this.ManualFreeze == true
         || (this.AutoFreeze != AutoFreezeReason.None && this.ManualFreeze != false);
 
-    /// <summary>Whether the flow of time should be adjusted.</summary>
+    /// <summary>Whether the flow of time should be adjusted (if it is a festival day).</summary>
+    /// <remarks>Currently only enables/disables based on user setting for festival days</remarks>
     private bool AdjustTime;
+
+    /// <summary>Minimum number for <see cref="TickInterval"/> allowed in milliseconds</summary>
+    /// <remarks>Could be added to ModConfig menu</remarks>
+    private int minTickIntervalAllowed = 500;
 
     /// <summary>Backing field for <see cref="TickInterval"/>.</summary>
     private int _tickInterval;
@@ -44,7 +49,7 @@ internal class ModEntry : Mod
     private int TickInterval
     {
         get => this._tickInterval;
-        set => this._tickInterval = Math.Max(value, 0);
+        set => this._tickInterval = Math.Max(value, this.minTickIntervalAllowed);
     }
 
     /// <summary>How much real time has elapsed so far during this 10-game-minute interval</summary>
@@ -268,7 +273,10 @@ internal class ModEntry : Mod
     /// <param name="increase">Whether to increment the tick interval; else decrement.</param>
     private void ChangeTickInterval(bool increase)
     {
-        // get offset to apply
+        // Get offset to apply, starting at 1 second;
+        //  Left ctrl  = 100 seconds,
+        //  Left shift = 10 seconds,
+        //  Left alt   = 0.1 seconds.
         int change = 1000;
         {
             KeyboardState state = Keyboard.GetState();
@@ -280,18 +288,16 @@ internal class ModEntry : Mod
                 change /= 10;
         }
 
-        // update tick interval
-        if (!increase)
-        {
-            int minAllowed = Math.Min(this.TickInterval, change);
-            this.TickInterval = Math.Max(minAllowed, this.TickInterval - change);
-        }
-        else
-            this.TickInterval = this.TickInterval + change;
+        // increase or decrease tick interval by offset
+        if (increase)
+            this.TickInterval += change;
+        // only allow decrease if TickInterval remains above the minimum allowed.
+        else if (this.TickInterval - change >= this.minTickIntervalAllowed)
+            this.TickInterval -= change;
 
         // log change
         this.Notifier.QuickNotify(
-            I18n.Message_SpeedChanged(seconds: this.TickInterval / 1000)
+            I18n.Message_SpeedChanged(seconds: (float)this.TickInterval / 1000)
         );
         this.Monitor.Log($"Tick length set to {this.TickInterval / 1000d:0.##} seconds.", LogLevel.Info);
     }
