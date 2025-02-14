@@ -30,13 +30,8 @@ internal class TimeHelper
     public double TickProgress
     {
         get => (double)Game1.gameTimeInterval / this.CurrentDefaultTickInterval;
-        set
-        {
-            double newInterval = (value + this.CurrentProgressRemainder) * this.CurrentDefaultTickInterval;
-            Game1.gameTimeInterval = (int)newInterval;
-
-            this.CurrentProgressRemainder = (newInterval % 1) / this.CurrentDefaultTickInterval;
-        }
+        // the math.floor stops rounding errors causing time-skip, e.g. 6999.5 milliseconds rounding to 7000 and then progressing time.
+        set => Game1.gameTimeInterval = (int)(Math.Floor(value * this.CurrentDefaultTickInterval));
     }
 
 

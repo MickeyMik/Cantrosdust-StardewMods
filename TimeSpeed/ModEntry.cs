@@ -47,6 +47,12 @@ internal class ModEntry : Mod
         set => this._tickInterval = Math.Max(value, 0);
     }
 
+    /// <summary>How much real time has elapsed so far during this 10-game-minute interval</summary>
+    private double ElapsedRealTimeInTenMinuteInterval;
+
+    /// <summary>The percentage of ElapsedRealTimeInTenMinuteInterval / TargetTimeInterval</summary>
+    private double GameTimeIntervalProgress;
+
 
     /*********
     ** Public methods
@@ -181,7 +187,7 @@ internal class ModEntry : Mod
         if (!this.ShouldEnable())
             return;
 
-        this.TimeHelper.Update();
+        this.TickUpdate();
 
         if (e.IsOneSecond && this.Monitor.IsVerbose)
         {
@@ -226,6 +232,30 @@ internal class ModEntry : Mod
     /****
     ** Methods
     ****/
+    /// <summary>Runs during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>; adds and adjusts time.</summary>
+    private void TickUpdate()
+    {
+        // If timespeed should be disabled (AdjustTime refers to festival day setting), don't update any tickprogress
+        if (!this.ShouldEnable() || !this.AdjustTime)
+            return;
+
+        // If time is frozen, skip calculations and keep current TimeIntervalProgress
+        if (!this.IsTimeFrozen)
+        {
+            // If GameTimeInterval is 0, reset ElapsedRealTimeInTenMinuteInterval to 0
+            // Otherwise, add the game's elapsedGameTime to ElapsedRealTimeInTenMinuteInterval
+            if (Game1.gameTimeInterval == 0)
+                this.ElapsedRealTimeInTenMinuteInterval = 0;
+            else
+                this.ElapsedRealTimeInTenMinuteInterval += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
+
+            // Calculate percentage towards target TickInterval
+            this.GameTimeIntervalProgress = (double)Math.Min(this.ElapsedRealTimeInTenMinuteInterval / this.TickInterval, 1);
+        }
+        // Updates game-time based on current progress towards TickInterval.
+        this.TimeHelper.TickProgress = this.GameTimeIntervalProgress;
+    }
+
     /// <summary>Get whether time features should be enabled.</summary>
     /// <param name="forInput">Whether to check for input handling.</param>
     private bool ShouldEnable(bool forInput = false)
