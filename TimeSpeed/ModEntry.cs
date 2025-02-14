@@ -362,7 +362,7 @@ internal class ModEntry : Mod
                     break;
 
                 default:
-                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeSpeedHere(seconds: this.TargetTickInterval / 1000));
+                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeSpeedHere(seconds: (float)this.TargetTickInterval / 1000));
                     break;
             }
         }
