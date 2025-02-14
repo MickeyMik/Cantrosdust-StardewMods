@@ -47,6 +47,13 @@ internal class ModEntry : Mod
         set => this._tickInterval = Math.Max(value, 0);
     }
 
+    /// <summary>The number of milliseconds that has elapsed since last 10-game-minute tick interval.</summary>
+    private double ElapsedTimeInCurrentTickInterval;
+
+    /// <summary>The percentage of <see cref="TickInterval"/> that has elapsed since the last tick.</summary>
+    /// <remarks>See <see cref="ElapsedTimeInCurrentTickInterval"/> for milliseconds.</remarks>
+    private double TargetTickProgress;
+
 
     /*********
     ** Public methods
@@ -181,7 +188,7 @@ internal class ModEntry : Mod
         if (!this.ShouldEnable())
             return;
 
-        this.TimeHelper.Update();
+        this.TimeUpdate();
 
         if (e.IsOneSecond && this.Monitor.IsVerbose)
         {
@@ -226,6 +233,34 @@ internal class ModEntry : Mod
     /****
     ** Methods
     ****/
+    /// <summary>Counts and adjusts time during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>.</summary>
+    private void TimeUpdate()
+    {
+        // Skip if TimeSpeed should be disabled
+        if (!this.ShouldEnable())
+            return;
+
+        // If time is frozen, skip calculations and keep current TargetTickProgress
+        if (!this.IsTimeFrozen)
+        {
+            // Skip time adjustment if disabled today
+            if (!this.AdjustTime)
+                return;
+
+            // If GameTimeInterval is 0 (the UpdateTick after the game-clock ticked forward), reset ElapsedTimeInCurrentTickInterval to 0
+            // Otherwise, add the game's elapsedGameTime to ElapsedTimeInCurrentTickInterval
+            if (Game1.gameTimeInterval == 0)
+                this.ElapsedTimeInCurrentTickInterval = 0;
+            else
+                this.ElapsedTimeInCurrentTickInterval += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
+
+            // Calculate percentage towards TickInterval
+            this.TargetTickProgress = (double)Math.Min(this.ElapsedTimeInCurrentTickInterval / this.TickInterval, 1);
+        }
+        // Updates game-time based on current progress towards TickInterval.
+        this.TimeHelper.TickProgress = this.TargetTickProgress;
+    }
+
     /// <summary>Get whether time features should be enabled.</summary>
     /// <param name="forInput">Whether to check for input handling.</param>
     private bool ShouldEnable(bool forInput = false)
