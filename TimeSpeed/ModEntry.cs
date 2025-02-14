@@ -36,27 +36,28 @@ internal class ModEntry : Mod
 
     /// <summary>Whether the flow of time should be adjusted (if it is a festival day).</summary>
     /// <remarks>Currently only enables/disables based on user setting for festival days</remarks>
-    private bool EnableToday;
+    private bool EnableTimeFlowToday;
 
-    /// <summary>Minimum number for <see cref="TickInterval"/> allowed in milliseconds</summary>
-    /// <remarks>Could be added to ModConfig menu</remarks>
+    /// <summary>Minimum milliseconds allowed for <see cref="TargetTickInterval"/>.</summary>
+    /// <remarks>Could be added to ModConfig menu.</remarks>
     private int minTickIntervalAllowed = 500;
 
-    /// <summary>Backing field for <see cref="TickInterval"/>.</summary>
+    /// <summary>Backing field for <see cref="TargetTickInterval"/>.</summary>
     private int _tickInterval;
 
-    /// <summary>The number of milliseconds per 10-game-minutes to apply.</summary>
-    private int TickInterval
+    /// <summary>The number of milliseconds per 10-game-minute tick to apply.</summary>
+    private int TargetTickInterval
     {
         get => this._tickInterval;
         set => this._tickInterval = Math.Max(value, this.minTickIntervalAllowed);
     }
 
-    /// <summary>How much real time has elapsed so far during this 10-game-minute interval</summary>
-    private double ElapsedRealTimeInTenMinuteInterval;
+    /// <summary>The number of milliseconds that has elapsed since last 10-game-minute tick interval.</summary>
+    private double ElapsedTimeInCurrentTickInterval;
 
-    /// <summary>The percentage of ElapsedRealTimeInTenMinuteInterval / TargetTimeInterval</summary>
-    private double GameTimeIntervalProgress;
+    /// <summary>The percentage of <see cref="TargetTickInterval"/> that's elapsed since the last tick.</summary>
+    /// <remarks>See <see cref="ElapsedTimeInCurrentTickInterval"/> for milliseconds.</remarks>
+    private double TargetTickProgress;
 
 
     /*********
@@ -191,7 +192,7 @@ internal class ModEntry : Mod
         if (!this.ShouldEnable())
             return;
 
-        this.TickUpdate();
+        this.TimeUpdate();
 
         if (e.IsOneSecond && this.Monitor.IsVerbose)
         {
@@ -205,7 +206,7 @@ internal class ModEntry : Mod
             else
                 timeFrozenLabel = null;
 
-            this.Monitor.Log($"Time is {Game1.timeOfDay}; {this.TimeHelper.TickProgress:P} towards {Utility.ModifyTime(Game1.timeOfDay, 10)} (tick interval: {this.TimeHelper.CurrentDefaultTickInterval}, {this.TickInterval / 10_000m:0.##}s/min{timeFrozenLabel})");
+            this.Monitor.Log($"Time is {Game1.timeOfDay}; {this.TimeHelper.GameTickProgress:P} towards {Utility.ModifyTime(Game1.timeOfDay, 10)} (tick interval: {this.TimeHelper.CurrentDefaultTickInterval}, {this.TargetTickInterval / 10_000m:0.##}s/min{timeFrozenLabel})");
         }
     }
 
@@ -213,28 +214,32 @@ internal class ModEntry : Mod
     /****
     ** Methods
     ****/
-    /// <summary>Runs during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>; adds and adjusts time.</summary>
-    private void TickUpdate()
+    /// <summary>Counts and adjusts time during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>.</summary>
+    private void TimeUpdate()
     {
-        // Skip tickprogress if TimeSpeed should be disabled
-        if (!this.ShouldEnable() || !this.EnableToday)
+        // Skip if TimeSpeed should be disabled
+        if (!this.ShouldEnable())
             return;
 
-        // If time is frozen, skip calculations and keep current TimeIntervalProgress
+        // If time is frozen, skip calculations and keep current TargetTickProgress
         if (!this.IsTimeFrozen)
         {
-            // If GameTimeInterval is 0 (the tickUpdate when time jumps), reset ElapsedRealTimeInTenMinuteInterval to 0
-            // Otherwise, add the game's elapsedGameTime to ElapsedRealTimeInTenMinuteInterval
-            if (Game1.gameTimeInterval == 0)
-                this.ElapsedRealTimeInTenMinuteInterval = 0;
-            else
-                this.ElapsedRealTimeInTenMinuteInterval += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
+            // Skip time adjustment if mod is disabled today
+            if (!this.EnableTimeFlowToday)
+                return;
 
-            // Calculate percentage towards target TickInterval
-            this.GameTimeIntervalProgress = (double)Math.Min(this.ElapsedRealTimeInTenMinuteInterval / this.TickInterval, 1);
+            // If GameTimeInterval is 0 (the UpdateTick after the game-clock ticked forward), reset ElapsedTimeInCurrentTickInterval to 0
+            // Otherwise, add the game's elapsedGameTime to ElapsedTimeInCurrentTickInterval
+            if (Game1.gameTimeInterval == 0)
+                this.ElapsedTimeInCurrentTickInterval = 0;
+            else
+                this.ElapsedTimeInCurrentTickInterval += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
+
+            // Calculate percentage towards TargetTickInterval
+            this.TargetTickProgress = (double)Math.Min(this.ElapsedTimeInCurrentTickInterval / this.TargetTickInterval, 1);
         }
-        // Updates game-time based on current progress towards TickInterval.
-        this.TimeHelper.TickProgress = this.GameTimeIntervalProgress;
+        // Updates game-time based on current progress towards TargetTickInterval.
+        this.TimeHelper.GameTickProgress = this.TargetTickProgress;
     }
 
     /// <summary>Get whether time features should be enabled.</summary>
@@ -290,16 +295,16 @@ internal class ModEntry : Mod
 
         // increase or decrease tick interval by offset
         if (increase)
-            this.TickInterval += change;
+            this.TargetTickInterval += change;
         // only allow decrease if TickInterval remains above the minimum allowed.
-        else if (this.TickInterval - change >= this.minTickIntervalAllowed)
-            this.TickInterval -= change;
+        else if (this.TargetTickInterval - change >= this.minTickIntervalAllowed)
+            this.TargetTickInterval -= change;
 
         // log change
         this.Notifier.QuickNotify(
-            I18n.Message_SpeedChanged(seconds: (float)this.TickInterval / 1000)
+            I18n.Message_SpeedChanged(seconds: (float)this.TargetTickInterval / 1000)
         );
-        this.Monitor.Log($"Tick length set to {this.TickInterval / 1000d:0.##} seconds.", LogLevel.Info);
+        this.Monitor.Log($"Tick length set to {this.TargetTickInterval / 1000d:0.##} seconds.", LogLevel.Info);
     }
 
     /// <summary>Toggle whether time is frozen.</summary>
@@ -341,7 +346,7 @@ internal class ModEntry : Mod
 
         // update time settings
         this.UpdateTimeFreeze();
-        this.TickInterval = this.Config.GetMillisecondsPerMinute(location) * 10;
+        this.TargetTickInterval = this.Config.GetMillisecondsPerMinute(location) * 10;
 
         // notify player
         if (this.Config.LocationNotify)
@@ -357,7 +362,7 @@ internal class ModEntry : Mod
                     break;
 
                 default:
-                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeSpeedHere(seconds: this.TickInterval / 1000));
+                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeSpeedHere(seconds: this.TargetTickInterval / 1000));
                     break;
             }
         }
@@ -396,7 +401,7 @@ internal class ModEntry : Mod
     /// <param name="dayOfMonth">The current day of month.</param>
     private void UpdateEnableToday(Season season, int dayOfMonth)
     {
-        this.EnableToday = this.Config.ShouldEnableForDay(season, dayOfMonth);
+        this.EnableTimeFlowToday = this.Config.ShouldEnableForDay(season, dayOfMonth);
     }
 
     /// <summary>Get the freeze type which applies for the current context, ignoring overrides by the player.</summary>

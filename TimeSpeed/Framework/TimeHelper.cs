@@ -14,7 +14,7 @@ internal class TimeHelper
     public int CurrentDefaultTickInterval => Game1.realMilliSecondsPerGameTenMinutes + (Game1.currentLocation?.ExtraMillisecondsPerInGameMinute * 10 ?? 0);
 
     /// <summary>The percentage of the <see cref="CurrentDefaultTickInterval"/> that's elapsed since the last tick.</summary>
-    public double TickProgress
+    public double GameTickProgress
     {
         get => (double)Game1.gameTimeInterval / this.CurrentDefaultTickInterval;
         // the math.floor stops rounding errors causing time-skip, e.g. 6999.5 milliseconds rounding to 7000 and then progressing time.
