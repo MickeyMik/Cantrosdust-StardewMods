@@ -223,7 +223,7 @@ internal class ModEntry : Mod
         // If time is frozen, skip calculations and keep current TimeIntervalProgress
         if (!this.IsTimeFrozen)
         {
-            // If GameTimeInterval is 0, reset ElapsedRealTimeInTenMinuteInterval to 0
+            // If GameTimeInterval is 0 (the tickUpdate when time jumps), reset ElapsedRealTimeInTenMinuteInterval to 0
             // Otherwise, add the game's elapsedGameTime to ElapsedRealTimeInTenMinuteInterval
             if (Game1.gameTimeInterval == 0)
                 this.ElapsedRealTimeInTenMinuteInterval = 0;
