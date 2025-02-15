@@ -191,6 +191,7 @@ internal class ModEntry : Mod
 
 
         //Remark:
+        //  As of OnWarped is 
         //      This if statement is only here because I'm checking time intervals every tick update in multiplayer.
         //      In the future, it is better if it was only checked when anyone warps to new timezone, removes redundancy.
         //      However, then everyone would need the mod.
@@ -207,14 +208,6 @@ internal class ModEntry : Mod
             return;
 
         this.UpdateFreezeForTime();
-        this.ResetTimeIntervals();
-    }
-
-    private void ResetTimeIntervals()
-    {
-        this.PreviousGameTimeInterval = 0;
-        this.ElapsedTimeInCurrentTickInterval = 0;
-        this.TargetTickProgress = 0;
     }
 
     /// <inheritdoc cref="IGameLoopEvents.UpdateTicked"/>
@@ -250,28 +243,32 @@ internal class ModEntry : Mod
     ** Methods
     ****/
 
-    private double PreviousGameTimeInterval;
-
-    /// <summary>Runs during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>; adds and adjusts time.</summary>
+    /// <summary>Counts and adjusts time during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>.</summary>
     private void TimeUpdate()
     {
-        if (this.PreviousGameTimeInterval < (double)Game1.gameTimeInterval && !this.IsTimeFrozen) // If gameTimeInterval has increased since PreviousElapsedTimeInterval;
-            this.ElapsedTimeInCurrentTickInterval += (Math.Abs(Game1.gameTimeInterval - this.PreviousGameTimeInterval)); // add the difference to ElapsedTimeInterval.
-        else if (Game1.gameTimeInterval == 0) // If gameTimeInterval has reset to 0;
-            this.ElapsedTimeInCurrentTickInterval = 0; // Change ElapsedTimeInterval to 0.
-
-        // Calculate percentage towards target TickInterval
-        this.TargetTickProgress = (double)Math.Min((double)(this.ElapsedTimeInCurrentTickInterval / this.TargetTickInterval), 1);
-
-
-        // Copied from "OnTickProgressed" function, originally un-commented
-        if (!this.IsTimeAdjustmentEnabledToday) // Specifically refers to festival days config
+        // Skip if TimeSpeed should be disabled
+        if (!this.ShouldEnable())
             return;
 
-        this.TimeHelper.GameTickProgress = this.TargetTickProgress;
+        // If time is frozen, skip calculations and keep current TargetTickProgress
+        if (!this.IsTimeFrozen)
+        {
+            // Skip time adjustment if disabled today
+            if (!this.IsTimeAdjustmentEnabledToday)
+                return;
 
-        // stores the current gameTimeInterval to check difference next update.
-        this.PreviousGameTimeInterval = Game1.gameTimeInterval;
+            // If GameTimeInterval is 0 (the UpdateTick after the game-clock ticked forward), reset ElapsedTimeInCurrentTickInterval to 0
+            // Otherwise, add the game's elapsedGameTime to ElapsedTimeInCurrentTickInterval
+            if (Game1.gameTimeInterval == 0)
+                this.ElapsedTimeInCurrentTickInterval = 0;
+            else
+                this.ElapsedTimeInCurrentTickInterval += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
+
+            // Calculate percentage towards TargetTickInterval
+            this.TargetTickProgress = (double)Math.Min(this.ElapsedTimeInCurrentTickInterval / this.TargetTickInterval, 1);
+        }
+        // Updates game-time based on current progress towards TargetTickInterval.
+        this.TimeHelper.GameTickProgress = this.TargetTickProgress;
     }
 
     /// <summary>Get whether time features should be enabled.</summary>
