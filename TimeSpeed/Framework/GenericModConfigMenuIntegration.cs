@@ -228,4 +228,3 @@ internal static class GenericModConfigMenuIntegration
             );*/
         }
     }
-}
