@@ -219,7 +219,7 @@ internal class ModEntry : Mod
             return;
 
         //if(Game1.IsMultiplayer)
-        this.UpdateTimeIntervalSetting();
+        this.UpdateTargetTickInterval();
         this.TimeUpdate();
     }
 
@@ -376,23 +376,23 @@ internal class ModEntry : Mod
 
 
         // Update freeze and tick interval settings
-        this.UpdateTimeIntervalSetting();
+        this.UpdateTargetTickInterval();
 
         // Notifies all players with this mod
         this.NotifyIntervalChange();
     }
 
     /// <summary>To compare with newTickInterval</summary>
-    /// <remarks>Used only in <see cref="UpdateTimeIntervalSetting"/></remarks>
+    /// <remarks>Used in <see cref="UpdateTargetTickInterval"/> to notify players of change.</remarks>
     private int previousTickInterval;
 
     /// <summary>(Single and Multiplayer) Updates the Freeze and TickInterval settings based on all online farmers' location.</summary>
-    private void UpdateTimeIntervalSetting()
+    private void UpdateTargetTickInterval()
     {
         // Update freeze settings
         this.UpdateTimeFreeze();
 
-        // List of all active time intervals (based on current online farmers' locations).
+        // List of all active TickIntervals (based on current online farmers' locations).
         List<int> MultiLocationIntervals = new();
 
         // For each online farmer, update list with the farmer's current location's time interval
@@ -401,7 +401,7 @@ internal class ModEntry : Mod
 
         // store the new tick interval
         int newTickInterval = (int)Math.Floor(MultiLocationIntervals.Average());
-
+        
         // change tick interval and notify players if tick interval has changed
         if (this.previousTickInterval != newTickInterval)
         {
