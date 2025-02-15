@@ -24,17 +24,17 @@ internal class ModConfig
     /// <summary>The keyboard bindings used to control the flow of time. See available keys at <a href="https://msdn.microsoft.com/en-us/library/microsoft.xna.framework.input.keys.aspx" />.</summary>
     public ModControlsConfig Keys { get; set; } = new();
 
-        public bool AllowMultiplayerTimeControls { get; set; } = false;
+    public bool AllowMultiplayerTimeControls { get; set; } = false;
 
-        public enum MultiplayerTimeMode
-        {
-            Host,
-            Majority,
-            Max,
-            Min,
-            Average,
-            Fair
-        }
+    public enum MultiplayerTimeMode
+    {
+        Host,
+        Majority,
+        Max,
+        Min,
+        Average,
+        Fair
+    }
 
 
     /*********
@@ -52,7 +52,7 @@ internal class ModConfig
     /// <param name="passOutCheck">Get whether the time should be frozen before players pass out (1:50am).</param>
     public bool ShouldFreeze(int time, bool passOutCheck = false)
     {
-        if(passOutCheck)
+        if (passOutCheck)
             return time >= 2550 && this.FreezeTime.PassOut;
         else
             return time >= this.FreezeTime.AnywhereAtTime;
