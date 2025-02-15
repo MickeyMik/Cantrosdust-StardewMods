@@ -71,5 +71,12 @@
     "config.speed-up-time-key.name": "Speed up time",
     "config.speed-up-time-key.desc": "The key which speeds up time by one second per 10-game-minutes. Combine with Control for 100 seconds, Shift for 10 seconds, or Alt for 0.1 seconds.",
     "config.reload-key.name": "Reload config",
-    "config.reload-key.desc": "The key which reloads all values from the config file and applies them immediately. Time will stay frozen if it was frozen via hotkey."
+    "config.reload-key.desc": "The key which reloads all values from the config file and applies them immediately. Time will stay frozen if it was frozen via hotkey.",
+
+    // Multiplayer settings
+    "config.multiplayer": "Multiplayer",
+    "config.multiplayer-speed-mode.name": "Multiplayer time handling (WIP)",
+    "config.multiplayer-speed-mode.desc": "The mode on how to handle time: Host (only host time decides), Majority (half of players' time decides), Max (player with longest time decides), Min (player with shortest time decides), Average (average of everyone's time), Fair (calculated based on each player's time spent deciding)",
+    "config.multiplayer-keybinds.name": "Allow everyone to control time (WIP)",
+    "config.multiplayer-keybinds.desc": "Check to allow everyone to freeze/slow/speed up time."
 }

@@ -208,5 +208,24 @@ internal static class GenericModConfigMenuIntegration
             getValue: () => getConfig().Keys.ReloadConfig,
             setValue: value => getConfig().Keys.ReloadConfig = value
         );
+
+            // Multiplayer settings
+            api.AddSectionTitle(manifest, I18n.Config_Multiplayer);
+            api.AddBoolOption(
+                manifest,
+                name: I18n.Config_MultiplayerKeybinds_Name,
+                tooltip: I18n.Config_MultiplayerKeybinds_Desc,
+                getValue: () => getConfig().AllowMultiplayerTimeControls,
+                setValue: value => getConfig().AllowMultiplayerTimeControls = value
+            );
+/*            api.AddTextOption(
+                manifest,
+                name: I18n.Config_MultiplayerSpeedMode_Name,
+                tooltip: I18n.Config_MultiplayerSpeedMode_Desc,
+                getValue: () => ModConfig.MultiplayerTimeMode,
+                setValue: value = ModConfig.MultiplayerTimeMode = value,
+                allowedValues: 
+            );*/
+        }
     }
 }

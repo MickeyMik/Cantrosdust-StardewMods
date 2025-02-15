@@ -24,6 +24,18 @@ internal class ModConfig
     /// <summary>The keyboard bindings used to control the flow of time. See available keys at <a href="https://msdn.microsoft.com/en-us/library/microsoft.xna.framework.input.keys.aspx" />.</summary>
     public ModControlsConfig Keys { get; set; } = new();
 
+        public bool AllowMultiplayerTimeControls { get; set; } = false;
+
+        public enum MultiplayerTimeMode
+        {
+            Host,
+            Majority,
+            Max,
+            Min,
+            Average,
+            Fair
+        }
+
 
     /*********
     ** Public methods

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using cantorsdust.Common;
 using Microsoft.Xna.Framework.Input;
 using StardewModdingAPI;
@@ -70,6 +72,9 @@ internal class ModEntry : Mod
     /// <remarks>See <see cref="ElapsedTimeInCurrentTickInterval"/> for milliseconds.</remarks>
     private double TargetTickProgress;
 
+        /// <summary>Yet to be implemented: intended idea is for this to track which player has wasted most time, for "fair" mode (list players, location?, and time "wasted")</summary>
+        private Dictionary<string, int> PlayerInterval;
+
 
     /*********
     ** Public methods
@@ -90,7 +95,8 @@ internal class ModEntry : Mod
         helper.Events.GameLoop.TimeChanged += this.OnTimeChanged;
         helper.Events.GameLoop.DayStarted += this.OnDayStarted;
         helper.Events.Input.ButtonsChanged += this.OnButtonsChanged;
-        helper.Events.Player.Warped += this.OnWarped;
+            //helper.Events.Player.Warped += this.OnWarped; // testing the tick updater check instead, see onUpdateTicked();
+            helper.Events.Multiplayer.ModMessageReceived += this.OnModMessageReceived;
 
         // add time freeze/unfreeze notification
         {
@@ -139,7 +145,8 @@ internal class ModEntry : Mod
     private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
     {
         if (!Context.IsMainPlayer)
-            this.Monitor.Log("Disabled mod; only works for the main player in multiplayer.", LogLevel.Warn);
+                // This should be changed now that there is multiplayer-interactivity. Host is only requirement, unless other players want notifications.
+                this.Monitor.Log("Time functionality disabled; only host controls time in multiplayer, mod is optional for farmhands if they want to receive notifications.", LogLevel.Warn);
     }
 
     /// <inheritdoc cref="IGameLoopEvents.DayStarted"/>
@@ -181,6 +188,13 @@ internal class ModEntry : Mod
         if (!this.ShouldEnable() || !e.IsLocalPlayer)
             return;
 
+
+
+            //Remark:
+            //      This if statement is only here because I'm checking time intervals every tick update in multiplayer.
+            //      In the future, it is better if it was only checked when anyone warps to new timezone, removes redundancy.
+            //      However, then everyone would need the mod.
+            if(!Game1.IsMultiplayer)
         this.UpdateSettingsForLocation(e.NewLocation);
     }
 
@@ -193,7 +207,15 @@ internal class ModEntry : Mod
             return;
 
         this.UpdateFreezeForTime();
+            this.ResetTimeIntervals();
     }
+
+        private void ResetTimeIntervals()
+        {
+            this.PreviousGameTimeInterval = 0;
+            this.ElapsedTimeInCurrentTickInterval = 0;
+            this.TargetTickProgress = 0;
+        }
 
     /// <inheritdoc cref="IGameLoopEvents.UpdateTicked"/>
     /// <param name="sender">The event sender.</param>
@@ -203,55 +225,54 @@ internal class ModEntry : Mod
         if (!this.ShouldEnable())
             return;
 
+            //if(Game1.IsMultiplayer)
+                this.UpdateTimeIntervalSetting();
         this.TimeUpdate();
-
-        if (e.IsOneSecond && this.Monitor.IsVerbose)
-        {
-            string timeFrozenLabel;
-            if (this.ManualFreeze is true)
-                timeFrozenLabel = ", frozen manually";
-            else if (this.ManualFreeze is false)
-                timeFrozenLabel = ", resumed manually";
-            else if (this.IsTimeFrozen)
-                timeFrozenLabel = $", frozen per {this.AutoFreeze}";
-            else
-                timeFrozenLabel = null;
-
-            this.Monitor.Log($"Time is {Game1.timeOfDay}; {this.TimeHelper.GameTickProgress:P} towards {Utility.ModifyTime(Game1.timeOfDay, 10)} (tick interval: {this.TimeHelper.CurrentDefaultTickInterval}, {this.TargetTickInterval / 10_000m:0.##}s/min{timeFrozenLabel})");
-        }
     }
+
+        /// <summary>Simply notifies all players with this mod when time changes</summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void OnModMessageReceived(object sender, ModMessageReceivedEventArgs e)
+        {
+            if (e.FromModID == this.ModManifest.UniqueID)
+                if (Enum.TryParse(e.Type, out Notifier.MessageType messageType))
+                {
+                    if (this.Config.LocationNotify || messageType.Equals(Notifier.MessageType.Quick))
+                        this.Notifier.Notify(messageType, e.ReadAs<string>());
+                }
+            else
+                    this.Monitor.Log($"Could not parse '{e.Type}' to messageType. No message was sent.", LogLevel.Warn);
+        }
 
 
     /****
     ** Methods
     ****/
-    /// <summary>Counts and adjusts time during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>.</summary>
-    private void TimeUpdate()
-    {
-        // Skip if TimeSpeed should be disabled
-        if (!this.ShouldEnable())
-            return;
 
-        // If time is frozen, skip calculations and keep current TargetTickProgress
-        if (!this.IsTimeFrozen)
+    private double PreviousGameTimeInterval;
+
+        /// <summary>Runs during <see cref="ModEntry.OnUpdateTicked(object, UpdateTickedEventArgs)"/>; adds and adjusts time.</summary>
+        private void TimeUpdate()
         {
-            // Skip time adjustment if disabled today
-            if (!this.IsTimeAdjustmentEnabledToday)
+            if (this.PreviousGameTimeInterval < (double)Game1.gameTimeInterval && !this.IsTimeFrozen) // If gameTimeInterval has increased since PreviousElapsedTimeInterval;
+                this.ElapsedTimeInCurrentTickInterval += (Math.Abs(Game1.gameTimeInterval - this.PreviousGameTimeInterval)); // add the difference to ElapsedTimeInterval.
+            else if (Game1.gameTimeInterval == 0) // If gameTimeInterval has reset to 0;
+                this.ElapsedTimeInCurrentTickInterval = 0; // Change ElapsedTimeInterval to 0.
+
+            // Calculate percentage towards target TickInterval
+            this.TargetTickProgress = (double)Math.Min((double)(this.ElapsedTimeInCurrentTickInterval / this.TargetTickInterval), 1);
+
+
+            // Copied from "OnTickProgressed" function, originally un-commented
+            if (!this.IsTimeAdjustmentEnabledToday) // Specifically refers to festival days config
                 return;
 
-            // If GameTimeInterval is 0 (the UpdateTick after the game-clock ticked forward), reset ElapsedTimeInCurrentTickInterval to 0
-            // Otherwise, add the game's elapsedGameTime to ElapsedTimeInCurrentTickInterval
-            if (Game1.gameTimeInterval == 0)
-                this.ElapsedTimeInCurrentTickInterval = 0;
-            else
-                this.ElapsedTimeInCurrentTickInterval += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
+            this.TimeHelper.GameTickProgress = this.TargetTickProgress;
 
-            // Calculate percentage towards TargetTickInterval
-            this.TargetTickProgress = (double)Math.Min(this.ElapsedTimeInCurrentTickInterval / this.TargetTickInterval, 1);
+            // stores the current gameTimeInterval to check difference next update.
+            this.PreviousGameTimeInterval = Game1.gameTimeInterval;
         }
-        // Updates game-time based on current progress towards TargetTickInterval.
-        this.TimeHelper.GameTickProgress = this.TargetTickProgress;
-    }
 
     /// <summary>Get whether time features should be enabled.</summary>
     /// <param name="forInput">Whether to check for input handling.</param>
@@ -282,7 +303,7 @@ internal class ModEntry : Mod
         this.Config = this.Helper.ReadConfig<ModConfig>();
         this.UpdateTimeAdjustmentEnabledToday(Game1.season, Game1.dayOfMonth);
         this.UpdateSettingsForLocation(Game1.currentLocation);
-        this.Notifier.ShortNotify(I18n.Message_ConfigReloaded());
+            this.SendNotifier(Notifier.MessageType.Short, I18n.Message_ConfigReloaded());
     }
 
     /// <summary>Increment or decrement the tick interval, taking into account the held modifier key if applicable.</summary>
@@ -312,10 +333,8 @@ internal class ModEntry : Mod
             this.TargetTickInterval -= change;
 
         // log change
-        this.Notifier.QuickNotify(
-            I18n.Message_SpeedChanged(seconds: (float)this.TargetTickInterval / 1000)
-        );
-        this.Monitor.Log($"Tick length set to {this.TargetTickInterval / 1000d:0.##} seconds.", LogLevel.Info);
+            this.SendNotifier(Notifier.MessageType.Quick, I18n.Message_SpeedChanged(seconds: (float)this.TargetTickInterval / 1000));
+            this.Monitor.Log($"Tick length set to {this.TargetTickInterval / 1000d: 0.##} seconds.", LogLevel.Info);
     }
 
     /// <summary>Toggle whether time is frozen.</summary>
@@ -324,13 +343,13 @@ internal class ModEntry : Mod
         if (!this.IsTimeFrozen)
         {
             this.UpdateTimeFreeze(manualOverride: true);
-            this.Notifier.QuickNotify(I18n.Message_TimeStopped());
+                this.SendNotifier(Notifier.MessageType.Quick, I18n.Message_TimeStopped());
             this.Monitor.Log("Time is frozen globally.", LogLevel.Info);
         }
         else
         {
             this.UpdateTimeFreeze(manualOverride: false);
-            this.Notifier.QuickNotify(I18n.Message_TimeResumed());
+                this.SendNotifier(Notifier.MessageType.Quick, I18n.Message_TimeResumed());
             this.Monitor.Log($"Time is resumed at \"{Game1.currentLocation.Name}\".", LogLevel.Info);
         }
     }
@@ -343,7 +362,7 @@ internal class ModEntry : Mod
 
         if (!wasFrozen && this.IsTimeFrozen)
         {
-            this.Notifier.ShortNotify(I18n.Message_OnTimeChange_TimeStopped());
+                this.SendNotifier(Notifier.MessageType.Quick, I18n.Message_OnTimeChange_TimeStopped());
             this.Monitor.Log($"Time automatically set to frozen at {Game1.timeOfDay}.", LogLevel.Info);
         }
     }
@@ -357,7 +376,52 @@ internal class ModEntry : Mod
 
         // update time settings and clear location freeze-override flag
         this.UpdateTimeFreeze(clearOverride: AutoFreezeReason.FrozenForLocation);
-        this.TargetTickInterval = this.Config.GetMillisecondsPerMinute(location) * 10;
+
+
+        // Update freeze and tick interval settings
+        this.UpdateTimeIntervalSetting();
+
+            // Notifies all players with this mod
+            this.NotifyIntervalChange();
+        }
+
+        /// <summary>To compare with newTickInterval</summary>
+        /// <remarks>Used only in <see cref="UpdateTimeIntervalSetting"/></remarks>
+        private int previousTickInterval;
+
+        /// <summary>(Single and Multiplayer) Updates the Freeze and TickInterval settings based on all online farmers' location.</summary>
+        private void UpdateTimeIntervalSetting()
+        {
+            // Update freeze settings
+            this.UpdateTimeFreeze();
+
+            // List of all active time intervals (based on current online farmers' locations).
+            List<int> MultiLocationIntervals = new();
+
+            // For each online farmer, update list with the farmer's current location's time interval
+            foreach (Farmer farmer in Game1.getOnlineFarmers())
+                MultiLocationIntervals.Add(this.Config.GetMillisecondsPerMinute(farmer.currentLocation) * 10);
+
+            // store the new tick interval
+            int newTickInterval = (int)Math.Floor(MultiLocationIntervals.Average());
+
+            // change tick interval and notify players if tick interval has changed
+            if (this.previousTickInterval != newTickInterval)
+            {
+                // Take the average of all time intervals.
+                this.TargetTickInterval = newTickInterval;
+                // Notify all players of the time change.
+                this.NotifyIntervalChange();
+            }
+            // Store previous tick interval
+            this.previousTickInterval = newTickInterval;
+        }
+
+        /// <summary>Sends notification to each player regarding time status</summary>
+        private void NotifyIntervalChange()
+        {
+            // Logs time interval
+            this.Monitor.Log($"TimeInterval: {this.TargetTickInterval}");
 
         // notify player
         if (this.Config.LocationNotify)
@@ -365,23 +429,32 @@ internal class ModEntry : Mod
             switch (this.AutoFreeze)
             {
                 case AutoFreezeReason.FrozenAtTime when this.IsTimeFrozen:
-                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeStoppedGlobally());
+                        this.SendNotifier(Notifier.MessageType.Short, I18n.Message_OnLocationChange_TimeStoppedGlobally());
                     break;
 
                 case AutoFreezeReason.FrozenForLocation when this.IsTimeFrozen:
-                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeStoppedHere());
+                        this.SendNotifier(Notifier.MessageType.Short, I18n.Message_OnLocationChange_TimeStoppedHere());
                     break;
 
                 case AutoFreezeReason.FrozenBeforePassOut when this.IsTimeFrozen:
-                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeStoppedGloballyPassOut());
+                    this.SendNotifier(Notifier.MessageType.Short, I18n.Message_OnLocationChange_TimeStoppedGloballyPassOut());
                     break;
 
                 default:
-                    this.Notifier.ShortNotify(I18n.Message_OnLocationChange_TimeSpeedHere(seconds: (float)this.TargetTickInterval / 1000));
+                        this.SendNotifier(Notifier.MessageType.Short, I18n.Message_OnLocationChange_TimeSpeedHere(seconds: this.TargetTickInterval / 1000));
                     break;
             }
         }
     }
+
+        /// <summary>Sends the <see cref="Notifier"/> message to all players with mod.</summary>
+        /// <param name="messageType"><see cref="Notifier.MessageType.Quick"/> (1sec) or <see cref="Notifier.MessageType.Short"/> (2sec).</param>
+        /// <param name="message">Message to send in-game.</param>
+        private void SendNotifier(Notifier.MessageType messageType, string message)
+        {
+                this.Helper.Multiplayer.SendMessage(message, messageType.ToString());
+                this.Notifier.Notify(messageType, message);
+        }
 
     /// <summary>Update the <see cref="AutoFreeze"/> and <see cref="ManualFreeze"/> flags based on the current context.</summary>
     /// <param name="manualOverride">An explicit freeze (<c>true</c>) or unfreeze (<c>false</c>) requested by the player, if applicable.</param>
